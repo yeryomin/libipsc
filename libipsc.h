@@ -22,11 +22,14 @@
 #define IPSC_HOST_LOCAL		NULL
 #define IPSC_MAX_QUEUE		65535
 #define IPSC_MAX_QUEUE_DEFAULT	16
+/* ipsc connection flags */
+#define IPSC_FLAG_SERVER	0x01
+#define IPSC_FLAG_LOCAL		0x02
 
 typedef struct ipsc_t {
 	int sd;			/* socket descriptor */
 	int maxq;		/* max queue */
-	int flags;		/* flags (internal use) */
+	int flags;		/* flags */
 	int alen;		/* size of address structure pointed by addr */
 	struct sockaddr *addr;	/* address */
 	void *cb_args;		/* ipsc_epoll_wait() callback args */
@@ -39,7 +42,7 @@ ssize_t ipsc_send( ipsc_t *ipsc, const void *buf, size_t buflen );
 ssize_t ipsc_recv( ipsc_t *ipsc, void *buf,
 		   size_t buflen, unsigned int timeout );
 int ipsc_epoll_init( ipsc_t *ipsc );
-int ipsc_epoll_wait( ipsc_t *ipsc, int epfd, int (*cb)(ipsc_t *ipsc) );
+int ipsc_epoll_wait( ipsc_t *ipsc, int epfd, ssize_t (*cb)(ipsc_t *ipsc) );
 void ipsc_close( ipsc_t *ipsc );
 
 #endif /* _LIBIPSC_H_ */

@@ -146,7 +146,7 @@ int ipsc_epoll_init( ipsc_t *ipsc )
 	return epfd;
 }
 
-int ipsc_epoll_wait( ipsc_t *ipsc, int epfd, int (*cb)(ipsc_t *) )
+int ipsc_epoll_wait( ipsc_t *ipsc, int epfd, ssize_t (*cb)(ipsc_t *) )
 {
 	int i;
 	int pool = 0;

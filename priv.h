@@ -26,9 +26,6 @@
 
 #include "libipsc.h"
 
-/* ipsc connection flags */
-#define IPSC_FLAG_SERVER	0x01
-#define IPSC_FLAG_LOCAL		0x02
 #define IPSC_SOCKET_FILE	"/tmp/ipsc-%i.sock"
 
 extern inline int ipsc_set_nonblock( ipsc_t *ipsc );
