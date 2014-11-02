@@ -116,7 +116,7 @@ ssize_t ipsc_recv( ipsc_t *ipsc, void *buf,
 
 	while ( !recvd ) {
 		rb = recv( ipsc->sd, (char *)buf + recvd, buflen - recvd, 0 );
-		if ( rb == -1 ) {
+		if ( rb < 1 ) {
 			if ( ( (errno == EAGAIN || errno == EWOULDBLOCK) &&
 						timeout == 0 ) ||
 						errno == EINTR )
