@@ -19,6 +19,7 @@
 #include <fcntl.h>
 #include <errno.h>
 #include <unistd.h>
+#include <signal.h>
 
 #include <sys/un.h>
 #include <sys/epoll.h>

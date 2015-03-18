@@ -5,6 +5,8 @@ OBJECTS = $(SOURCES:.c=.o)
 SHARED  = $(NAME).so
 STATIC  = $(NAME).a
 
+LDFLAGS += -lssl -lcrypto
+
 default: all
 all: $(SOURCES) $(SHARED) $(STATIC)
 

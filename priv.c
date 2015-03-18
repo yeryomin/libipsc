@@ -99,6 +99,7 @@ ipsc_t *ipsc_init( int st, int proto, char *host, uint16_t port )
 	ipsc->alen    = 0;
 	ipsc->addr    = NULL;
 	ipsc->cb_args = NULL;
+	ipsc->tls     = NULL;
 
 	if ( ipsc_addr( &ipsc, host, port ) )
 		goto exit;

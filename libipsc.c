@@ -15,6 +15,76 @@
  */
 #include "priv.h"
 
+int ipsc_tls_init( ipsc_t *ipsc, char *cert, char *key, char *ca )
+{
+	if ( !ipsc || !cert || !key || !ca )
+		return -1;
+
+	int err = 0;
+	const SSL_METHOD *m;
+	SSL_library_init();
+
+	ipsc->tls = (ipsc_tls_t *)malloc( sizeof(ipsc_tls_t) );
+	if ( !ipsc->tls )
+		return -1;
+
+	ipsc->tls->data = NULL;
+	ipsc->tls->ctx  = NULL;
+
+	if ( ipsc->flags & IPSC_FLAG_SERVER )
+		m = TLSv1_server_method();
+	else
+		m = TLSv1_client_method();
+
+	ipsc->tls->ctx = SSL_CTX_new(m);
+
+	if ( !ipsc->tls->ctx )
+		return -1;
+
+	/* use tls only */
+	SSL_CTX_set_options( ipsc->tls->ctx, SSL_OP_NO_SSLv2 |
+					     SSL_OP_NO_SSLv3 );
+	/* TODO: use something else? make it configurable? */
+	SSL_CTX_set_cipher_list( ipsc->tls->ctx, "AES256-SHA" );
+
+	err = SSL_CTX_use_certificate_file( ipsc->tls->ctx,
+					    cert,
+					    SSL_FILETYPE_PEM );
+	if ( err <= 0 )
+		return -1;
+
+	err = SSL_CTX_use_PrivateKey_file( ipsc->tls->ctx,
+					   key,
+					   SSL_FILETYPE_PEM );
+	if ( err <= 0 )
+		return -1;
+
+	err = SSL_CTX_check_private_key( ipsc->tls->ctx );
+	if ( err != 1 )
+		return -1;
+
+	err = SSL_CTX_load_verify_locations( ipsc->tls->ctx, ca, NULL );
+	if ( !err )
+		return -1;
+
+	SSL_CTX_set_verify( ipsc->tls->ctx, SSL_VERIFY_PEER, NULL );
+	SSL_CTX_set_verify_depth( ipsc->tls->ctx, 1 );
+
+	/* TODO: use liba? */
+	/* not very good idea in general */
+	/* propose patches to openssl to allow passing MSG_NOSIGNAL to send? */
+	struct sigaction sa;
+	sa.sa_handler = SIG_IGN;
+	sigemptyset(&sa.sa_mask);
+	sa.sa_flags = 0;
+	if ( sigaction( SIGPIPE, &sa, 0 ) == -1 )
+		return -1;
+
+	ipsc->flags |= IPSC_FLAG_TLS;
+
+	return 0;
+}
+
 ipsc_t *ipsc_listen( int st, int proto, char *host, uint16_t port, int maxq )
 {
 	ipsc_t *ipsc = ipsc_init( st, proto, host, port );
@@ -57,6 +127,7 @@ ipsc_t *ipsc_accept( ipsc_t *ipsc )
 	client->alen    = ipsc->alen;
 	client->addr    = (struct sockaddr *)malloc( client->alen );
 	client->cb_args = ipsc->cb_args;
+	client->tls     = NULL;
 
 	if ( !client->addr )
 		goto exit;
@@ -65,10 +136,38 @@ ipsc_t *ipsc_accept( ipsc_t *ipsc )
 			     (socklen_t *)&(client->alen) );
 	if ( client->sd > 0 )
 		return client;
-
 exit:
 	ipsc_close( client );
 	return NULL;
+}
+
+int ipsc_accept_tls( ipsc_t *ipsc, ipsc_t *client )
+{
+	int err = 0;
+
+	client->tls = (ipsc_tls_t *)malloc( sizeof(ipsc_tls_t) );
+	if ( !client->tls )
+		return -1;
+
+	client->tls->ctx  = NULL;
+	client->tls->data = SSL_new( ipsc->tls->ctx );
+	if ( !client->tls->data )
+		return -1;
+
+	SSL_set_fd( client->tls->data, client->sd );
+
+	err = SSL_ERROR_WANT_READ;
+	while ( err == SSL_ERROR_WANT_READ || err == SSL_ERROR_WANT_WRITE ) {
+		err = SSL_accept( client->tls->data );
+		err = SSL_get_error( client->tls->data, err );
+	}
+
+	if ( err != SSL_ERROR_NONE )
+		return -1;
+
+	client->flags |= IPSC_FLAG_TLS;
+
+	return 0;
 }
 
 ipsc_t *ipsc_connect( int st, int proto, char *host, uint16_t port )
@@ -84,14 +183,44 @@ ipsc_t *ipsc_connect( int st, int proto, char *host, uint16_t port )
 	return NULL;
 }
 
+int ipsc_connect_tls( ipsc_t *ipsc )
+{
+	int err = 0;
+
+	if ( !ipsc->tls )
+		return -1;
+
+	ipsc->tls->data = SSL_new( ipsc->tls->ctx );
+	if ( !ipsc->tls->data )
+		return -1;
+
+	SSL_set_fd( ipsc->tls->data, ipsc->sd );
+
+	err = SSL_ERROR_WANT_READ;
+	while ( err == SSL_ERROR_WANT_READ || err == SSL_ERROR_WANT_WRITE ) {
+		err = SSL_connect( ipsc->tls->data );
+		err = SSL_get_error( ipsc->tls->data, err );
+	}
+
+	if ( err != SSL_ERROR_NONE )
+		return -1;
+
+	return 0;
+}
+
 ssize_t ipsc_send( ipsc_t *ipsc, const void *buf, size_t buflen )
 {
 	ssize_t sent = 0;
 	size_t sent_sum = 0;
 
 	while ( sent_sum < buflen ) {
-		sent = send( ipsc->sd, (const char *)buf + sent_sum,
-				buflen - sent_sum, MSG_NOSIGNAL );
+		if ( ipsc->flags & IPSC_FLAG_TLS )
+			sent = SSL_write( ipsc->tls->data,
+					  (const char *)buf + sent_sum,
+					  buflen - sent_sum );
+		else
+			sent = send( ipsc->sd, (const char *)buf + sent_sum,
+					buflen - sent_sum, MSG_NOSIGNAL );
 		if ( sent == -1 ) {
 			if ( errno == EAGAIN ||
 			     errno == EWOULDBLOCK ||
@@ -115,7 +244,13 @@ ssize_t ipsc_recv( ipsc_t *ipsc, void *buf,
 		return -1;
 
 	while ( !recvd ) {
-		rb = recv( ipsc->sd, (char *)buf + recvd, buflen - recvd, 0 );
+		if ( ipsc->flags & IPSC_FLAG_TLS )
+			rb = SSL_read( ipsc->tls->data, (char *)buf + recvd,
+							buflen - recvd );
+		else
+			rb = recv( ipsc->sd, (char *)buf + recvd,
+							buflen - recvd, 0 );
+
 		if ( rb < 1 ) {
 			if ( ( (errno == EAGAIN || errno == EWOULDBLOCK) &&
 						timeout == 0 ) ||
@@ -166,6 +301,11 @@ int ipsc_epoll_wait( ipsc_t *ipsc, int epfd, ssize_t (*cb)(ipsc_t *) )
 					ipsc_close( client );
 					continue;
 				}
+				if ( ipsc->flags & IPSC_FLAG_TLS )
+					if ( ipsc_accept_tls( ipsc, client ) ) {
+						ipsc_close( client );
+						continue;
+					}
 				if ( ipsc_epoll_newfd( client, epfd ) ) {
 					ipsc_close( client );
 					continue;
@@ -197,6 +337,9 @@ void ipsc_close( ipsc_t *ipsc )
 	if ( !ipsc )
 		return;
 
+	if ( ipsc->flags & IPSC_FLAG_TLS && ipsc->tls->data )
+		SSL_shutdown( ipsc->tls->data );
+
 	if ( ipsc->sd > 0 ) {
 		shutdown( ipsc->sd, SHUT_RDWR );
 		close( ipsc->sd );
@@ -204,6 +347,15 @@ void ipsc_close( ipsc_t *ipsc )
 
 	if ( ipsc->flags & IPSC_FLAG_LOCAL && ipsc->flags & IPSC_FLAG_SERVER )
 		unlink( ((struct sockaddr_un *)ipsc->addr)->sun_path );
+
+	if ( ipsc->flags & IPSC_FLAG_TLS && ipsc->tls ) {
+		SSL_free( ipsc->tls->data );
+		SSL_CTX_free( ipsc->tls->ctx );
+		ipsc->tls->data = NULL;
+		ipsc->tls->ctx = NULL;
+		free( ipsc->tls );
+		ipsc->tls = NULL;
+	}
 
 	free( ipsc->addr );
 	free( ipsc );
