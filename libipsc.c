@@ -68,7 +68,7 @@ int ipsc_tls_init( ipsc_t *ipsc, char *cert, char *key, char *ca )
 		return -1;
 
 	SSL_CTX_set_verify( ipsc->tls->ctx, SSL_VERIFY_PEER, NULL );
-	SSL_CTX_set_verify_depth( ipsc->tls->ctx, 1 );
+	SSL_CTX_set_verify_depth( ipsc->tls->ctx, IPSC_MAX_CERT_CHAIN );
 
 	/* TODO: use liba? */
 	/* not very good idea in general */

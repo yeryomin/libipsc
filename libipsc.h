@@ -23,6 +23,7 @@
 #define IPSC_HOST_LOCAL		NULL
 #define IPSC_MAX_QUEUE		65535
 #define IPSC_MAX_QUEUE_DEFAULT	16
+#define IPSC_MAX_CERT_CHAIN	3
 /* ipsc connection flags */
 #define IPSC_FLAG_SERVER	0x01
 #define IPSC_FLAG_LOCAL		0x02
