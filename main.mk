@@ -4,19 +4,20 @@ HEADERS = $(NAME).h priv.h
 OBJECTS = $(SOURCES:.c=.o)
 SHARED  = $(NAME).so
 STATIC  = $(NAME).a
+RANLIB ?= ranlib
 
 LDFLAGS += -lssl -lcrypto
 
 default: all
-all: $(SOURCES) $(SHARED) $(STATIC)
+all: $(HEADERS) $(SOURCES) $(SHARED) $(STATIC)
 
-.c.o: $(HEADERS)
+.c.o:
 	$(CC) -c $(CFLAGS) $< -o $@
 
-$(SHARED): $(OBJECTS)
+$(SHARED): $(HEADERS) $(SOURCES) $(OBJECTS)
 	$(CC) $(OBJECTS) $(LDFLAGS) -shared -o $@
 
-$(STATIC): $(OBJECTS)
+$(STATIC): $(HEADERS) $(SOURCES) $(OBJECTS)
 	$(AR) -rcv $@ $(OBJECTS)
 	$(RANLIB) $(STATIC)
 
