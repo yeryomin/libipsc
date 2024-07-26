@@ -29,8 +29,8 @@
 
 #define IPSC_SOCKET_FILE	"/tmp/ipsc-%i.sock"
 
-extern inline int ipsc_set_nonblock( ipsc_t *ipsc );
-extern inline int ipsc_set_recv_timeout( ipsc_t *ipsc, unsigned int to );
+extern int ipsc_set_nonblock( ipsc_t *ipsc );
+extern int ipsc_set_recv_timeout( ipsc_t *ipsc, unsigned int to );
 extern int ipsc_addr_un( ipsc_t **ipsc, uint16_t port );
 extern int ipsc_addr_in( ipsc_t **ipsc, char *host, uint16_t port );
 extern int ipsc_addr( ipsc_t **ipsc, char *host, uint16_t port );
