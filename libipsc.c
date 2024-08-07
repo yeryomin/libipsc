@@ -15,13 +15,25 @@
  */
 #include "priv.h"
 
-int ipsc_tls_init( ipsc_t *ipsc, char *cert, char *key, char *ca )
+int ipsc_tls_init( ipsc_t *ipsc, char *cert, char *key, char *ca, char *dhparams )
 {
-	if ( !ipsc || !cert || !key || !ca )
+	if ( !ipsc || !cert || !key || !ca || !dhparams)
 		return -1;
 
 	int err = 0;
 	const SSL_METHOD *m;
+	EVP_PKEY *dh = NULL;
+	FILE *dhfp = NULL;
+
+	BIO *bio = BIO_new_file( dhparams, "r" );
+	if ( !bio )
+		return -1;
+
+	dh = PEM_read_bio_Parameters(bio, NULL);
+	BIO_free(bio);
+	if ( !dh )
+		return -1;
+
 	SSL_library_init();
 
 	ipsc->tls = (ipsc_tls_t *)malloc( sizeof(ipsc_tls_t) );
@@ -32,20 +44,21 @@ int ipsc_tls_init( ipsc_t *ipsc, char *cert, char *key, char *ca )
 	ipsc->tls->ctx  = NULL;
 
 	if ( ipsc->flags & IPSC_FLAG_SERVER )
-		m = TLSv1_server_method();
+		m = TLS_server_method();
 	else
-		m = TLSv1_client_method();
+		m = TLS_client_method();
 
 	ipsc->tls->ctx = SSL_CTX_new(m);
 
 	if ( !ipsc->tls->ctx )
 		return -1;
 
-	/* use tls only */
-	SSL_CTX_set_options( ipsc->tls->ctx, SSL_OP_NO_SSLv2 |
-					     SSL_OP_NO_SSLv3 );
+	/* use tls 1.3 only, with DHE */
+	SSL_CTX_set_tmp_dh( ipsc->tls->ctx, dh );
+	SSL_CTX_set_min_proto_version( ipsc->tls->ctx, TLS1_3_VERSION );
+	SSL_CTX_set_options( ipsc->tls->ctx, SSL_OP_ALL );
 	/* TODO: use something else? make it configurable? */
-	SSL_CTX_set_cipher_list( ipsc->tls->ctx, "AES256-SHA" );
+	SSL_CTX_set_cipher_list( ipsc->tls->ctx, "ECDHE-ECDSA-AES128-GCM-SHA256" );
 
 	err = SSL_CTX_use_certificate_file( ipsc->tls->ctx,
 					    cert,
@@ -155,7 +168,10 @@ int ipsc_accept_tls( ipsc_t *ipsc, ipsc_t *client )
 		return -1;
 
 	SSL_set_fd( client->tls->data, client->sd );
+	SSL_set_accept_state( client->tls->data );
+	SSL_do_handshake( client->tls->data );
 
+	ERR_clear_error();
 	err = SSL_ERROR_WANT_READ;
 	while ( err == SSL_ERROR_WANT_READ || err == SSL_ERROR_WANT_WRITE ) {
 		err = SSL_accept( client->tls->data );
@@ -195,7 +211,10 @@ int ipsc_connect_tls( ipsc_t *ipsc )
 		return -1;
 
 	SSL_set_fd( ipsc->tls->data, ipsc->sd );
+	SSL_set_connect_state( ipsc->tls->data );
+	SSL_do_handshake( ipsc->tls->data );
 
+	ERR_clear_error();
 	err = SSL_ERROR_WANT_READ;
 	while ( err == SSL_ERROR_WANT_READ || err == SSL_ERROR_WANT_WRITE ) {
 		err = SSL_connect( ipsc->tls->data );

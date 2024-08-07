@@ -19,6 +19,7 @@
 #include <arpa/inet.h>
 #include <sys/socket.h>
 #include <openssl/ssl.h>
+#include <openssl/err.h>
 
 #define IPSC_HOST_LOCAL		NULL
 #define IPSC_MAX_QUEUE		65535
@@ -44,7 +45,7 @@ typedef struct ipsc_t {
 	ipsc_tls_t *tls;
 } ipsc_t;
 
-int ipsc_tls_init( ipsc_t *ipsc, char *cert, char *key, char *ca );
+int ipsc_tls_init( ipsc_t *ipsc, char *cert, char *key, char *ca, char *dhparams );
 ipsc_t *ipsc_listen( int st, int proto, char *host, uint16_t port, int maxq );
 ipsc_t *ipsc_accept( ipsc_t *ipsc );
 int ipsc_accept_tls( ipsc_t *sipsc, ipsc_t *cipsc );
