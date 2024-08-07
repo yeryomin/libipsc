@@ -17,7 +17,7 @@
 
 int ipsc_tls_init( ipsc_t *ipsc, char *cert, char *key, char *ca, char *dhparams )
 {
-	if ( !ipsc || !cert || !key || !ca || !dhparams)
+	if ( !ipsc || !cert || !key || !ca || !dhparams )
 		return -1;
 
 	int err = 0;
@@ -29,8 +29,8 @@ int ipsc_tls_init( ipsc_t *ipsc, char *cert, char *key, char *ca, char *dhparams
 	if ( !bio )
 		return -1;
 
-	dh = PEM_read_bio_Parameters(bio, NULL);
-	BIO_free(bio);
+	dh = PEM_read_bio_Parameters( bio, NULL );
+	BIO_free( bio );
 	if ( !dh )
 		return -1;
 
